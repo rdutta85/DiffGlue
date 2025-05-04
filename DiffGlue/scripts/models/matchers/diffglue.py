@@ -39,12 +39,16 @@ def rotate_half(x: torch.Tensor) -> torch.Tensor:
     return torch.stack((-x2, x1), dim=-1).flatten(start_dim=-2)
 
 
-def apply_cached_rotary_emb(freqs: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+def apply_cached_rotary_emb(
+    freqs: torch.Tensor, t: torch.Tensor
+) -> torch.Tensor:
     return (t * freqs[0]) + (rotate_half(t) * freqs[1])
 
 
 class LearnableFourierPositionalEncoding(nn.Module):
-    def __init__(self, M: int, dim: int, F_dim: int = None, gamma: float = 1.0) -> None:
+    def __init__(
+        self, M: int, dim: int, F_dim: int = None, gamma: float = 1.0
+    ) -> None:
         super().__init__()
         F_dim = F_dim if F_dim is not None else dim
         self.gamma = gamma
@@ -77,10 +81,12 @@ class TokenConfidence(nn.Module):
         logit1 = self.token[0](desc1.detach()).squeeze(-1)
         la_now, la_final = la_now.detach(), la_final.detach()
         correct0 = (
-            la_final[:, :-1, :].max(-1).indices == la_now[:, :-1, :].max(-1).indices
+            la_final[:, :-1, :].max(-1).indices
+            == la_now[:, :-1, :].max(-1).indices
         )
         correct1 = (
-            la_final[:, :, :-1].max(-2).indices == la_now[:, :, :-1].max(-2).indices
+            la_final[:, :, :-1].max(-2).indices
+            == la_now[:, :, :-1].max(-2).indices
         )
         return (
             self.loss_fn(logit0, correct0.float()).mean(-1)
@@ -102,20 +108,37 @@ class Attention(nn.Module):
         if FLASH_AVAILABLE:
             torch.backends.cuda.enable_flash_sdp(allow_flash)
 
-    def forward(self, q, k, v, adj_mat: Optional[torch.Tensor] = None, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self,
+        q,
+        k,
+        v,
+        adj_mat: Optional[torch.Tensor] = None,
+        mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         if self.enable_flash and q.device.type == "cuda":
             # use torch 2.0 scaled_dot_product_attention with flash
             if FLASH_AVAILABLE:
                 if adj_mat is not None:
-                    v_add = torch.einsum("...ij,...jd->...id", F.softmax(adj_mat, -1).unsqueeze(1), v)
+                    v_add = torch.einsum(
+                        "...ij,...jd->...id",
+                        F.softmax(adj_mat, -1).unsqueeze(1),
+                        v,
+                    )
                 args = [x.half().contiguous() for x in [q, k, v]]
-                v = F.scaled_dot_product_attention(*args, attn_mask=mask).to(q.dtype)
+                v = F.scaled_dot_product_attention(*args, attn_mask=mask).to(
+                    q.dtype
+                )
                 if adj_mat is not None:
                     v += v_add
                 return v if mask is None else v.nan_to_num()
         elif FLASH_AVAILABLE:
             if adj_mat is not None:
-                v_add = torch.einsum("...ij,...jd->...id", F.softmax(adj_mat, -1).unsqueeze(1), v)
+                v_add = torch.einsum(
+                    "...ij,...jd->...id",
+                    F.softmax(adj_mat, -1).unsqueeze(1),
+                    v,
+                )
             args = [x.contiguous() for x in [q, k, v]]
             v = F.scaled_dot_product_attention(*args, attn_mask=mask)
             if adj_mat is not None:
@@ -135,7 +158,11 @@ class Attention(nn.Module):
 
 class SelfBlock(nn.Module):
     def __init__(
-        self, embed_dim: int, num_heads: int, flash: bool = False, bias: bool = True
+        self,
+        embed_dim: int,
+        num_heads: int,
+        flash: bool = False,
+        bias: bool = True,
     ) -> None:
         super().__init__()
         self.embed_dim = embed_dim
@@ -170,7 +197,11 @@ class SelfBlock(nn.Module):
 
 class CrossBlock(nn.Module):
     def __init__(
-        self, embed_dim: int, num_heads: int, flash: bool = False, bias: bool = True
+        self,
+        embed_dim: int,
+        num_heads: int,
+        flash: bool = False,
+        bias: bool = True,
     ) -> None:
         super().__init__()
         self.heads = num_heads
@@ -195,7 +226,12 @@ class CrossBlock(nn.Module):
         return func(x0), func(x1)
 
     def forward(
-        self, x0: torch.Tensor, x1: torch.Tensor, encoding0: torch.Tensor = None, encoding1: torch.Tensor = None, mask: Optional[torch.Tensor] = None
+        self,
+        x0: torch.Tensor,
+        x1: torch.Tensor,
+        encoding0: torch.Tensor = None,
+        encoding1: torch.Tensor = None,
+        mask: Optional[torch.Tensor] = None,
     ) -> List[torch.Tensor]:
         qk0, qk1 = self.map_(self.to_qk, x0, x1)
         v0, v1 = self.map_(self.to_v, x0, x1)
@@ -209,7 +245,10 @@ class CrossBlock(nn.Module):
         if self.flash is not None and qk0.device.type == "cuda":
             m0 = self.flash(qk0, qk1, v1, mask=mask)
             m1 = self.flash(
-                qk1, qk0, v0, mask=mask.transpose(-1, -2) if mask is not None else None
+                qk1,
+                qk0,
+                v0,
+                mask=mask.transpose(-1, -2) if mask is not None else None,
             )
         else:
             qk0, qk1 = qk0 * self.scale**0.5, qk1 * self.scale**0.5
@@ -219,10 +258,14 @@ class CrossBlock(nn.Module):
             attn01 = F.softmax(sim, dim=-1)
             attn10 = F.softmax(sim.transpose(-2, -1).contiguous(), dim=-1)
             m0 = torch.einsum("bhij, bhjd -> bhid", attn01, v1)
-            m1 = torch.einsum("bhji, bhjd -> bhid", attn10.transpose(-2, -1), v0)
+            m1 = torch.einsum(
+                "bhji, bhjd -> bhid", attn10.transpose(-2, -1), v0
+            )
             if mask is not None:
                 m0, m1 = m0.nan_to_num(), m1.nan_to_num()
-        m0, m1 = self.map_(lambda t: t.transpose(1, 2).flatten(start_dim=-2), m0, m1)
+        m0, m1 = self.map_(
+            lambda t: t.transpose(1, 2).flatten(start_dim=-2), m0, m1
+        )
         m0, m1 = self.map_(self.to_out, m0, m1)
         x0 = x0 + self.ffn(torch.cat([x0, m0], -1))
         x1 = x1 + self.ffn(torch.cat([x1, m1], -1))
@@ -231,7 +274,10 @@ class CrossBlock(nn.Module):
 
 class AdjBlock(nn.Module):
     def __init__(
-        self, embed_dim: int, num_heads: int = 1, bias: bool = True #, slope: float = 0.1
+        self,
+        embed_dim: int,
+        num_heads: int = 1,
+        bias: bool = True,  # , slope: float = 0.1
     ) -> None:
         super().__init__()
         self.heads = num_heads
@@ -251,7 +297,11 @@ class AdjBlock(nn.Module):
         return func(x0), func(x1)
 
     def forward(
-        self, x0: torch.Tensor, x1: torch.Tensor, adj_mat: Optional[torch.Tensor] = None, mask: Optional[torch.Tensor] = None
+        self,
+        x0: torch.Tensor,
+        x1: torch.Tensor,
+        adj_mat: Optional[torch.Tensor] = None,
+        mask: Optional[torch.Tensor] = None,
     ) -> List[torch.Tensor]:
         v0, v1 = self.map_(self.to_v, x0, x1)
         v0, v1 = map(
@@ -267,7 +317,9 @@ class AdjBlock(nn.Module):
         m1 = torch.einsum("bhji, bhjd -> bhid", attn10.transpose(-2, -1), v0)
         if mask is not None:
             m0, m1 = m0.nan_to_num(), m1.nan_to_num()
-        m0, m1 = self.map_(lambda t: t.transpose(1, 2).flatten(start_dim=-2), m0, m1)
+        m0, m1 = self.map_(
+            lambda t: t.transpose(1, 2).flatten(start_dim=-2), m0, m1
+        )
         m0, m1 = self.map_(self.to_out, m0, m1)
         x0 = x0 + self.ffn(torch.cat([x0, m0], -1))
         x1 = x1 + self.ffn(torch.cat([x1, m1], -1))
@@ -279,30 +331,45 @@ class TransformerLayer(nn.Module):
         super().__init__()
         self.atten_layers = 1
         self.embd_layers = nn.ModuleList(
-            [nn.Sequential(
-                nn.ReLU(),
-                nn.Linear(args[2], args[0]),
-            ) for _ in range(self.atten_layers)]
+            [
+                nn.Sequential(
+                    nn.ReLU(),
+                    nn.Linear(args[2], args[0]),
+                )
+                for _ in range(self.atten_layers)
+            ]
         )
         self_attn_args = (args[0], args[1], args[-1])
         self_attn_kwargs = {}
         self.self_attn = nn.ModuleList(
-            [SelfBlock(*self_attn_args, **self_attn_kwargs) for _ in range(self.atten_layers)]
+            [
+                SelfBlock(*self_attn_args, **self_attn_kwargs)
+                for _ in range(self.atten_layers)
+            ]
         )
         adj_attn_args = (args[0],)
         adj_attn_kwargs = {}
         self.adj_attn = nn.ModuleList(
-            [AdjBlock(*adj_attn_args, **adj_attn_kwargs) for _ in range(self.atten_layers)]
+            [
+                AdjBlock(*adj_attn_args, **adj_attn_kwargs)
+                for _ in range(self.atten_layers)
+            ]
         )
         cross_attn_args = (args[0], args[1], args[-1])
         cross_attn_kwargs = {}
         self.cross_attn = nn.ModuleList(
-            [CrossBlock(*cross_attn_args, **cross_attn_kwargs) for _ in range(self.atten_layers)]
+            [
+                CrossBlock(*cross_attn_args, **cross_attn_kwargs)
+                for _ in range(self.atten_layers)
+            ]
         )
         self.desc_compact = nn.ModuleList(
-            [nn.Sequential(
-                nn.Linear(2*args[0], args[0]),
-            ) for _ in range(self.atten_layers)]
+            [
+                nn.Sequential(
+                    nn.Linear(2 * args[0], args[0]),
+                )
+                for _ in range(self.atten_layers)
+            ]
         )
 
     def forward(
@@ -317,7 +384,9 @@ class TransformerLayer(nn.Module):
         mask1: Optional[torch.Tensor] = None,
     ):
         if mask0 is not None and mask1 is not None:
-            return self.masked_forward(desc0, desc1, encoding0, encoding1, embd, adj_mat, mask0, mask1)
+            return self.masked_forward(
+                desc0, desc1, encoding0, encoding1, embd, adj_mat, mask0, mask1
+            )
         else:
             for i in range(self.atten_layers):
                 desc0 = self.self_attn[i](desc0, encoding0)
@@ -325,13 +394,19 @@ class TransformerLayer(nn.Module):
                 cross_embd = self.embd_layers[i](embd).type(desc0.dtype)
                 desc0_adj = desc0 + cross_embd.unsqueeze(1)
                 desc1_adj = desc1 + cross_embd.unsqueeze(1)
-                desc0_adj, desc1_adj = self.adj_attn[i](desc0_adj, desc1_adj, adj_mat)
-                desc0, desc1 = self.desc_compact[i](torch.cat([desc0, desc0_adj], dim=-1)), self.desc_compact[i](torch.cat([desc1, desc1_adj], dim=-1))
+                desc0_adj, desc1_adj = self.adj_attn[i](
+                    desc0_adj, desc1_adj, adj_mat
+                )
+                desc0, desc1 = self.desc_compact[i](
+                    torch.cat([desc0, desc0_adj], dim=-1)
+                ), self.desc_compact[i](torch.cat([desc1, desc1_adj], dim=-1))
                 desc0, desc1 = self.cross_attn[i](desc0, desc1)
             return desc0, desc1
 
     # This part is compiled and allows padding inputs
-    def masked_forward(self, desc0, desc1, encoding0, encoding1, embd, adj_mat, mask0, mask1):
+    def masked_forward(
+        self, desc0, desc1, encoding0, encoding1, embd, adj_mat, mask0, mask1
+    ):
         mask = mask0 & mask1.transpose(-1, -2)
         mask0 = mask0 & mask0.transpose(-1, -2)
         mask1 = mask1 & mask1.transpose(-1, -2)
@@ -341,8 +416,12 @@ class TransformerLayer(nn.Module):
             cross_embd = self.embd_layers[i](embd).type(desc0.dtype)
             desc0_adj = desc0 + cross_embd.unsqueeze(1)
             desc1_adj = desc1 + cross_embd.unsqueeze(1)
-            desc0_adj, desc1_adj = self.adj_attn[i](desc0_adj, desc1_adj, adj_mat, mask)
-            desc0, desc1 = self.desc_compact[i](torch.cat([desc0, desc0_adj], dim=-1)), self.desc_compact[i](torch.cat([desc1, desc1_adj], dim=-1))
+            desc0_adj, desc1_adj = self.adj_attn[i](
+                desc0_adj, desc1_adj, adj_mat, mask
+            )
+            desc0, desc1 = self.desc_compact[i](
+                torch.cat([desc0, desc0_adj], dim=-1)
+            ), self.desc_compact[i](torch.cat([desc1, desc1_adj], dim=-1))
             desc0, desc1 = self.cross_attn[i](desc0, desc1, mask)
         return desc0, desc1
 
@@ -354,7 +433,9 @@ def sigmoid_log_double_softmax(
     b, m, n = sim.shape
     certainties = F.logsigmoid(z0) + F.logsigmoid(z1).transpose(1, 2)
     scores0 = F.log_softmax(sim, 2)
-    scores1 = F.log_softmax(sim.transpose(-1, -2).contiguous(), 2).transpose(-1, -2)
+    scores1 = F.log_softmax(sim.transpose(-1, -2).contiguous(), 2).transpose(
+        -1, -2
+    )
     scores = sim.new_full((b, m + 1, n + 1), 0)
     scores[:, :m, :n] = scores0 + scores1 + certainties
     scores[:, :-1, -1] = F.logsigmoid(-z0.squeeze(-1))
@@ -424,7 +505,12 @@ class DiffGlue(nn.Module):
         },
     }
 
-    required_data_keys = ["keypoints0", "keypoints1", "descriptors0", "descriptors1"]
+    required_data_keys = [
+        "keypoints0",
+        "keypoints1",
+        "descriptors0",
+        "descriptors1",
+    ]
 
     def __init__(self, conf) -> None:
         super().__init__()
@@ -432,13 +518,15 @@ class DiffGlue(nn.Module):
 
         self.time_embed_channels = conf.descriptor_dim * 4
         self.time_embed = nn.Sequential(
-            nn.Linear(conf.descriptor_dim, self.time_embed_channels), 
-            nn.ReLU(), 
-            nn.Linear(self.time_embed_channels, self.time_embed_channels), 
+            nn.Linear(conf.descriptor_dim, self.time_embed_channels),
+            nn.ReLU(),
+            nn.Linear(self.time_embed_channels, self.time_embed_channels),
         )
 
         if conf.input_dim != conf.descriptor_dim:
-            self.input_proj = nn.Linear(conf.input_dim, conf.descriptor_dim, bias=True)
+            self.input_proj = nn.Linear(
+                conf.input_dim, conf.descriptor_dim, bias=True
+            )
         else:
             self.input_proj = nn.Identity()
 
@@ -450,10 +538,15 @@ class DiffGlue(nn.Module):
         h, n, d = conf.num_heads, conf.n_layers, conf.descriptor_dim
 
         self.transformers = nn.ModuleList(
-            [TransformerLayer(d, h, self.time_embed_channels, conf.flash) for layer_index in range(n)]
+            [
+                TransformerLayer(d, h, self.time_embed_channels, conf.flash)
+                for layer_index in range(n)
+            ]
         )
 
-        self.log_assignment = nn.ModuleList([MatchAssignment(d) for _ in range(n)])
+        self.log_assignment = nn.ModuleList(
+            [MatchAssignment(d) for _ in range(n)]
+        )
         self.token_confidence = nn.ModuleList(
             # [TokenConfidence(d) for _ in range(n - 1)]
             [TokenConfidence(d) for _ in range(n)]
@@ -477,9 +570,13 @@ class DiffGlue(nn.Module):
             # rename old state dict entries
             for i in range(self.conf.n_layers):
                 pattern = f"self_attn.{i}", f"transformers.{i}.self_attn"
-                state_dict = {k.replace(*pattern): v for k, v in state_dict.items()}
+                state_dict = {
+                    k.replace(*pattern): v for k, v in state_dict.items()
+                }
                 pattern = f"cross_attn.{i}", f"transformers.{i}.cross_attn"
-                state_dict = {k.replace(*pattern): v for k, v in state_dict.items()}
+                state_dict = {
+                    k.replace(*pattern): v for k, v in state_dict.items()
+                }
             self.load_state_dict(state_dict, strict=False)
 
     def compile(self, mode="reduce-overhead"):
@@ -495,11 +592,19 @@ class DiffGlue(nn.Module):
             )
 
     def forward(self, adj_mat_fore, timesteps, data: dict) -> dict:
-        adj_mat_fore[...,:-1,:-1] = adj_mat_fore[...,:-1,:-1]/self.conf.scale+0.5
-        adj_mat_fore[...,:-1,-1] = adj_mat_fore[...,:-1,-1]/self.conf.scale+0.5
-        adj_mat_fore[...,-1,:-1] = adj_mat_fore[...,-1,:-1]/self.conf.scale+0.5
+        adj_mat_fore[..., :-1, :-1] = (
+            adj_mat_fore[..., :-1, :-1] / self.conf.scale + 0.5
+        )
+        adj_mat_fore[..., :-1, -1] = (
+            adj_mat_fore[..., :-1, -1] / self.conf.scale + 0.5
+        )
+        adj_mat_fore[..., -1, :-1] = (
+            adj_mat_fore[..., -1, :-1] / self.conf.scale + 0.5
+        )
         adj_mat_fore = adj_mat_fore.squeeze(1)
-        time_embd = self.time_embed(timestep_embedding(timesteps, self.conf.descriptor_dim))
+        time_embd = self.time_embed(
+            timestep_embedding(timesteps, self.conf.descriptor_dim)
+        )
 
         for key in self.required_data_keys:
             assert key in data, f"Missing key {key} in data"
@@ -550,7 +655,7 @@ class DiffGlue(nn.Module):
         if torch.isnan(encoding0).any() or torch.isnan(encoding1).any():
             encoding0 = encoding0
             encoding1 = encoding1
-            assert 1==2
+            assert 1 == 2
 
         # GNN + final_proj + assignment
         all_desc0, all_desc1 = [], []
@@ -558,10 +663,23 @@ class DiffGlue(nn.Module):
         for i in range(self.conf.n_layers):
             if self.conf.checkpointed and self.training:
                 desc0, desc1 = checkpoint(
-                    self.transformers[i], desc0, desc1, encoding0, encoding1, time_embd, adj_mat_fore[...,:-1,:-1]
+                    self.transformers[i],
+                    desc0,
+                    desc1,
+                    encoding0,
+                    encoding1,
+                    time_embd,
+                    adj_mat_fore[..., :-1, :-1],
                 )
             else:
-                desc0, desc1 = self.transformers[i](desc0, desc1, encoding0, encoding1, time_embd, adj_mat_fore[...,:-1,:-1])
+                desc0, desc1 = self.transformers[i](
+                    desc0,
+                    desc1,
+                    encoding0,
+                    encoding1,
+                    time_embd,
+                    adj_mat_fore[..., :-1, :-1],
+                )
             if self.training or i == self.conf.n_layers - 1:
                 all_desc0.append(desc0)
                 all_desc1.append(desc1)
@@ -569,12 +687,20 @@ class DiffGlue(nn.Module):
 
         desc0, desc1 = desc0[..., :m, :], desc1[..., :n, :]
         scores, _ = self.log_assignment[i](desc0, desc1)
-        m0, m1, mscores0, mscores1 = filter_matches(scores, self.conf.filter_threshold)
+        m0, m1, mscores0, mscores1 = filter_matches(
+            scores, self.conf.filter_threshold
+        )
 
         adj_mat = scores.unsqueeze(1).clone()
-        adj_mat[...,:-1,:-1] = (adj_mat[...,:-1,:-1].exp()-0.5)*self.conf.scale
-        adj_mat[...,:-1,-1] = (adj_mat[...,:-1,-1].exp()-0.5)*self.conf.scale
-        adj_mat[...,-1,:-1] = (adj_mat[...,-1,:-1].exp()-0.5)*self.conf.scale
+        adj_mat[..., :-1, :-1] = (
+            adj_mat[..., :-1, :-1].exp() - 0.5
+        ) * self.conf.scale
+        adj_mat[..., :-1, -1] = (
+            adj_mat[..., :-1, -1].exp() - 0.5
+        ) * self.conf.scale
+        adj_mat[..., -1, :-1] = (
+            adj_mat[..., -1, :-1].exp() - 0.5
+        ) * self.conf.scale
 
         pred = {
             "matches0": m0,
@@ -599,14 +725,22 @@ class DiffGlue(nn.Module):
             }
 
         sum_weights = 1.0
-        nll, gt_weights, loss_metrics = self.loss_fn(loss_params(pred, -1), data)
+        nll, gt_weights, loss_metrics = self.loss_fn(
+            loss_params(pred, -1), data
+        )
         N = pred["ref_descriptors0"].shape[1]
-        losses = {"matcher_total": nll, "last": nll.clone().detach(), **loss_metrics}
+        losses = {
+            "matcher_total": nll,
+            "last": nll.clone().detach(),
+            **loss_metrics,
+        }
 
         if self.training:
             losses["confidence"] = 0.0
 
-        losses["row_norm"] = pred["log_assignment"].exp()[:, :-1].sum(2).mean(1)
+        losses["row_norm"] = (
+            pred["log_assignment"].exp()[:, :-1].sum(2).mean(1)
+        )
 
         if self.training:
             for i in range(N):
@@ -618,7 +752,9 @@ class DiffGlue(nn.Module):
                 else:
                     weight = i + 1
                 sum_weights += weight
-                losses["matcher_total"] = losses["matcher_total"] + nll * weight
+                losses["matcher_total"] = (
+                    losses["matcher_total"] + nll * weight
+                )
 
                 losses["confidence"] += self.token_confidence[i].loss(
                     pred["ref_descriptors0"][:, i],
@@ -631,7 +767,9 @@ class DiffGlue(nn.Module):
         losses["matcher_total"] /= sum_weights
         # confidences
         if self.training:
-            losses["matcher_total"] = losses["matcher_total"] + losses["confidence"]
+            losses["matcher_total"] = (
+                losses["matcher_total"] + losses["confidence"]
+            )
 
         if not self.training:
             # add metrics

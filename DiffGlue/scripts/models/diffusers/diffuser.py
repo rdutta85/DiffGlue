@@ -1,8 +1,9 @@
 from typing import Any
+
 import numpy as np
 import torch as th
-
 from omegaconf import OmegaConf
+
 from . import gaussian_diffusion as gd
 from .gaussian_diffusion import GaussianDiffusion
 from .resample import create_named_schedule_sampler
@@ -72,6 +73,7 @@ class SpacedDiffusion(GaussianDiffusion):
                           original diffusion process to retain.
     :param kwargs: the kwargs to create the base diffusion process.
     """
+
     default_conf = {
         "steps": 1000,
         "learn_sigma": False,
@@ -95,18 +97,20 @@ class SpacedDiffusion(GaussianDiffusion):
         if not conf.timestep_respacing:
             self.conf.timestep_respacing = [conf.steps]
             conf.timestep_respacing = [conf.steps]
-        use_timesteps=space_timesteps(conf.steps, conf.timestep_respacing)
+        use_timesteps = space_timesteps(conf.steps, conf.timestep_respacing)
         if conf.use_kl:
             loss_type = gd.LossType.RESCALED_KL
         elif conf.rescale_learned_sigmas:
             loss_type = gd.LossType.RESCALED_MSE
         else:
             loss_type = gd.LossType.MSE
-        betas=gd.get_named_beta_schedule(conf.noise_schedule, conf.steps)
-        model_mean_type=(
-            gd.ModelMeanType.EPSILON if not conf.predict_xstart else gd.ModelMeanType.START_X
+        betas = gd.get_named_beta_schedule(conf.noise_schedule, conf.steps)
+        model_mean_type = (
+            gd.ModelMeanType.EPSILON
+            if not conf.predict_xstart
+            else gd.ModelMeanType.START_X
         )
-        model_var_type=(
+        model_var_type = (
             (
                 gd.ModelVarType.FIXED_LARGE
                 if not conf.sigma_small
@@ -115,8 +119,8 @@ class SpacedDiffusion(GaussianDiffusion):
             if not conf.learn_sigma
             else gd.ModelVarType.LEARNED_RANGE
         )
-        loss_type=loss_type
-        rescale_timesteps=conf.rescale_timesteps
+        loss_type = loss_type
+        rescale_timesteps = conf.rescale_timesteps
 
         self.use_timesteps = set(use_timesteps)
         self.timestep_map = []
@@ -131,7 +135,9 @@ class SpacedDiffusion(GaussianDiffusion):
             "scale": conf.scale,
         }
 
-        base_diffusion = GaussianDiffusion(**kwargs)  # pylint: disable=missing-kwoa
+        base_diffusion = GaussianDiffusion(
+            **kwargs
+        )  # pylint: disable=missing-kwoa
         last_alpha_cumprod = 1.0
         new_betas = []
         for i, alpha_cumprod in enumerate(base_diffusion.alphas_cumprod):
@@ -145,29 +151,49 @@ class SpacedDiffusion(GaussianDiffusion):
     def p_mean_variance(
         self, model, *args, **kwargs
     ):  # pylint: disable=signature-differs
-        return super().p_mean_variance(self._wrap_model(model), *args, **kwargs)
+        return super().p_mean_variance(
+            self._wrap_model(model), *args, **kwargs
+        )
 
     def training_losses(
         self, model, *args, **kwargs
     ):  # pylint: disable=signature-differs
-        return super().training_losses(self._wrap_model(model), *args, **kwargs)
+        return super().training_losses(
+            self._wrap_model(model), *args, **kwargs
+        )
 
     def sample(self, model, cond=None):
         if cond is None:
             cond = {}
         sample_fn = (
-            self.p_sample_loop if not self.conf.use_ddim else self.ddim_sample_loop
+            self.p_sample_loop
+            if not self.conf.use_ddim
+            else self.ddim_sample_loop
         )
-        sample = sample_fn(
-            model,
-            (cond["data"]["keypoints0"].shape[0], 1, cond["data"]["keypoints0"].shape[1]+1, cond["data"]["keypoints1"].shape[1]+1),
-            clip_denoised=self.conf.clip_denoised,
-            model_kwargs=cond,
-        ) if not self.conf.use_ddim else sample_fn(
-            model,
-            (cond["data"]["keypoints0"].shape[0], 1, cond["data"]["keypoints0"].shape[1]+1, cond["data"]["keypoints1"].shape[1]+1),
-            clip_denoised=self.conf.clip_denoised,
-            model_kwargs=cond,
+        sample = (
+            sample_fn(
+                model,
+                (
+                    cond["data"]["keypoints0"].shape[0],
+                    1,
+                    cond["data"]["keypoints0"].shape[1] + 1,
+                    cond["data"]["keypoints1"].shape[1] + 1,
+                ),
+                clip_denoised=self.conf.clip_denoised,
+                model_kwargs=cond,
+            )
+            if not self.conf.use_ddim
+            else sample_fn(
+                model,
+                (
+                    cond["data"]["keypoints0"].shape[0],
+                    1,
+                    cond["data"]["keypoints0"].shape[1] + 1,
+                    cond["data"]["keypoints1"].shape[1] + 1,
+                ),
+                clip_denoised=self.conf.clip_denoised,
+                model_kwargs=cond,
+            )
         )
         sample["sample"] = sample["sample"].contiguous()
         return sample
@@ -176,38 +202,53 @@ class SpacedDiffusion(GaussianDiffusion):
         if isinstance(model, _WrappedModel):
             return model
         return _WrappedModel(
-            model, self.timestep_map, self.rescale_timesteps, self.original_num_steps
+            model,
+            self.timestep_map,
+            self.rescale_timesteps,
+            self.original_num_steps,
         )
 
     def _scale_timesteps(self, t):
         # Scaling is done by the wrapped model.
         return t
-    
-    def __call__(
-        self, model, pred
-    ):  # pylint: disable=signature-differs
+
+    def __call__(self, model, pred):  # pylint: disable=signature-differs
         if model.training:
             self.training = True
-            self.schedule_sampler = create_named_schedule_sampler(self.conf.schedule_sampler, self)
+            self.schedule_sampler = create_named_schedule_sampler(
+                self.conf.schedule_sampler, self
+            )
             m, n = pred["gt_matches0"].size(-1), pred["gt_matches1"].size(-1)
             positive = pred["gt_assignment"].float()
             neg0 = (pred["gt_matches0"] == -1).float()
             neg1 = (pred["gt_matches1"] == -1).float()
-            x_start = th.zeros(pred["gt_assignment"].shape[0], 1, m+1, n+1).to(pred["gt_assignment"].device)
+            x_start = th.zeros(
+                pred["gt_assignment"].shape[0], 1, m + 1, n + 1
+            ).to(pred["gt_assignment"].device)
             x_start[:, 0, :-1, :-1] = positive
             x_start[:, 0, :-1, -1] = neg0
             x_start[:, 0, -1, :-1] = neg1
-            x_start[..., :-1, :-1] = (x_start[..., :-1, :-1]-0.5)*self.conf.scale
-            x_start[..., :-1,  -1] = (x_start[..., :-1,  -1]-0.5)*self.conf.scale
-            x_start[...,  -1, :-1] = (x_start[...,  -1, :-1]-0.5)*self.conf.scale
-            t, weights = self.schedule_sampler.sample(pred["gt_assignment"].shape[0], pred["gt_assignment"].device)
+            x_start[..., :-1, :-1] = (
+                x_start[..., :-1, :-1] - 0.5
+            ) * self.conf.scale
+            x_start[..., :-1, -1] = (
+                x_start[..., :-1, -1] - 0.5
+            ) * self.conf.scale
+            x_start[..., -1, :-1] = (
+                x_start[..., -1, :-1] - 0.5
+            ) * self.conf.scale
+            t, weights = self.schedule_sampler.sample(
+                pred["gt_assignment"].shape[0], pred["gt_assignment"].device
+            )
             args = (x_start, t)
             kwargs = {
                 "model_kwargs": {"data": pred},
                 "noise": None,
             }
-            results = self.training_losses(model, *args, **kwargs) # "loss", "vb"
-            results["diffuser_loss"] = results["diffuser_loss"]*weights
+            results = self.training_losses(
+                model, *args, **kwargs
+            )  # "loss", "vb"
+            results["diffuser_loss"] = results["diffuser_loss"] * weights
             return results
         else:
             self.training = False
@@ -222,18 +263,24 @@ class SpacedDiffusion(GaussianDiffusion):
         else:
             raise NotImplementedError
 
+
 class _WrappedModel:
-    def __init__(self, model, timestep_map, rescale_timesteps, original_num_steps):
+    def __init__(
+        self, model, timestep_map, rescale_timesteps, original_num_steps
+    ):
         self.model = model
         self.timestep_map = timestep_map
         self.rescale_timesteps = rescale_timesteps
         self.original_num_steps = original_num_steps
 
     def __call__(self, x, ts, **kwargs):
-        map_tensor = th.tensor(self.timestep_map, device=ts.device, dtype=ts.dtype)
+        map_tensor = th.tensor(
+            self.timestep_map, device=ts.device, dtype=ts.dtype
+        )
         new_ts = map_tensor[ts]
         if self.rescale_timesteps:
             new_ts = new_ts.float() * (1000.0 / self.original_num_steps)
         return self.model(x, new_ts, **kwargs)
+
 
 __main_model__ = SpacedDiffusion
