@@ -1,6 +1,7 @@
 """
 Simply load images from a folder or nested folders (does not have any split).
 """
+
 import argparse
 import logging
 import tarfile
@@ -61,6 +62,7 @@ class HPatches(BaseDataset, torch.utils.data.Dataset):
 
         self.root = DATA_PATH / conf.data_dir
         if not self.root.exists():
+            logger.info(f"HPatches dataset not found in {self.root}.")
             logger.info("Downloading the HPatches dataset.")
             self.download()
         self.sequences = sorted([x.name for x in self.root.iterdir()])
@@ -127,7 +129,10 @@ def visualize(args):
         images = []
         for _, data in zip(range(args.num_items), loader):
             images.append(
-                (data[f"view{i}"]["image"][0].permute(1, 2, 0) for i in range(2))
+                (
+                    data[f"view{i}"]["image"][0].permute(1, 2, 0)
+                    for i in range(2)
+                )
             )
     plot_image_grid(images, dpi=args.dpi)
     plt.tight_layout()

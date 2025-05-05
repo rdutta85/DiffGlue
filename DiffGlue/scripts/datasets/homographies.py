@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import omegaconf
 import torch
+from joblib import Parallel, delayed
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
@@ -100,14 +101,18 @@ class HomographyDataset(BaseDataset):
             for g in glob:
                 images += list(image_dir.glob("**/" + g))
             if len(images) == 0:
-                raise ValueError(f"Cannot find any image in folder: {image_dir}.")
+                raise ValueError(
+                    f"Cannot find any image in folder: {image_dir}."
+                )
             images = [i.relative_to(image_dir).as_posix() for i in images]
             images = sorted(images)  # for deterministic behavior
             logger.info("Found %d images in folder.", len(images))
         elif isinstance(conf.image_list, (str, Path)):
             image_list = data_dir / conf.image_list
             if not image_list.exists():
-                raise FileNotFoundError(f"Cannot find image list {image_list}.")
+                raise FileNotFoundError(
+                    f"Cannot find image list {image_list}."
+                )
             images = image_list.read_text().rstrip("\n").split("\n")
             for image in images:
                 if not (image_dir / image).exists():
@@ -137,14 +142,24 @@ class HomographyDataset(BaseDataset):
         num_files = 100
         url_base = "http://ptak.felk.cvut.cz/revisitop/revisitop1m/"
         list_name = "revisitop1m.txt"
-        torch.hub.download_url_to_file(url_base + list_name, tmp_dir / list_name)
-        for n in tqdm(range(num_files), position=1):
+        torch.hub.download_url_to_file(
+            url_base + list_name, tmp_dir / list_name
+        )
+
+        def _download_file(n):
             tar_name = "revisitop1m.{}.tar.gz".format(n + 1)
             tar_path = image_dir / tar_name
-            torch.hub.download_url_to_file(url_base + "jpg/" + tar_name, tar_path)
+            torch.hub.download_url_to_file(
+                url_base + "jpg/" + tar_name, tar_path
+            )
             with tarfile.open(tar_path) as tar:
                 tar.extractall(path=image_dir)
             tar_path.unlink()
+
+        Parallel(n_jobs=-1, backend="threading")(
+            delayed(_download_file)(n) for n in range(num_files)
+        )
+
         shutil.move(tmp_dir, data_dir)
 
     def get_dataset(self, split):
@@ -190,7 +205,9 @@ class _Dataset(torch.utils.data.Dataset):
 
         # Threshold
         if self.conf.load_features.thresh > 0:
-            valid = features["keypoint_scores"] >= self.conf.load_features.thresh
+            valid = (
+                features["keypoint_scores"] >= self.conf.load_features.thresh
+            )
             features = {k: v[valid] for k, v in features.items()}
 
         # Get the top keypoints and pad
@@ -216,9 +233,13 @@ class _Dataset(torch.utils.data.Dataset):
     def _read_view(self, img, H_conf, ps, left=False):
         data = sample_homography(img, H_conf, ps)
         if left:
-            data["image"] = self.left_augment(data["image"], return_tensor=True)
+            data["image"] = self.left_augment(
+                data["image"], return_tensor=True
+            )
         else:
-            data["image"] = self.photo_augment(data["image"], return_tensor=True)
+            data["image"] = self.photo_augment(
+                data["image"], return_tensor=True
+            )
 
         gs = data["image"].new_tensor([0.299, 0.587, 0.114]).view(3, 1, 1)
         if self.conf.grayscale:
@@ -236,7 +257,9 @@ class _Dataset(torch.utils.data.Dataset):
         img = read_image(self.image_dir / name, False)
         if img is None:
             logging.warning("Image %s could not be read.", name)
-            img = np.zeros((1024, 1024) + (() if self.conf.grayscale else (3,)))
+            img = np.zeros(
+                (1024, 1024) + (() if self.conf.grayscale else (3,))
+            )
         img = img.astype(np.float32) / 255.0
         size = img.shape[:2][::-1]
         ps = self.conf.homography.patch_shape
@@ -293,7 +316,10 @@ def visualize(args):
         images = []
         for _, data in zip(range(args.num_items), loader):
             images.append(
-                (data[f"view{i}"]["image"][0].permute(1, 2, 0) for i in range(2))
+                (
+                    data[f"view{i}"]["image"][0].permute(1, 2, 0)
+                    for i in range(2)
+                )
             )
     plot_image_grid(images, dpi=args.dpi)
     plt.tight_layout()

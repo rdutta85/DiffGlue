@@ -34,6 +34,7 @@ After creating and activating a practicable environment, our repository and othe
 ```
 git clone https://github.com/SuhZhang/DiffGlue
 cd DiffGlue
+sudo apt install -y python3-opencv
 pip install -r requirements.txt
 ```
 
