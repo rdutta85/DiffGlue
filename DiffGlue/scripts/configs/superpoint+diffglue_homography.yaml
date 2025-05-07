@@ -3,8 +3,8 @@ data:
     data_dir: revisitop1m
     train_size: 150000
     val_size: 2000
-    batch_size: 64
-    num_workers: 16
+    batch_size: 32
+    num_workers: 8
     homography:
         difficulty: 0.7
         max_angle: 45
@@ -49,6 +49,11 @@ model:
         checkpointed: true
         n_layers: 9
         scale: 2
+
+    IMAGE_FEATURE_EXTRACTOR: 
+        _target_: models.MultiScaleImageFeatureExtractor
+        modelname: "dino_vits16"
+        freeze: False
 train:
     seed: 0
     epochs: 40

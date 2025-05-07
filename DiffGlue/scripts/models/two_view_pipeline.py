@@ -10,8 +10,10 @@ Convention for the matches: m0[i] is the index of the keypoint in image 1
 that corresponds to the keypoint i in image 0. m0[i] = -1 if i is unmatched.
 """
 
+from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
+from .. import models
 from . import get_model
 from .base_model import BaseModel
 
@@ -20,6 +22,7 @@ to_ctr = OmegaConf.to_container  # convert DictConfig to dict
 
 class TwoViewPipeline(BaseModel):
     default_conf = {
+        "encoder": {"name": None},
         "extractor": {
             "name": None,
             "trainable": False,
@@ -44,12 +47,26 @@ class TwoViewPipeline(BaseModel):
     ]
 
     def _init(self, conf):
+        if conf.encoder.name:
+            self.encoder = instantiate(
+                conf.IMAGE_FEATURE_EXTRACTOR, _recursive_=False
+            )
+
         if conf.extractor.name:
-            self.extractor = get_model(conf.extractor.name)(to_ctr(conf.extractor))
+            self.extractor = get_model(conf.extractor.name)(
+                to_ctr(conf.extractor)
+            )
 
         if conf.diffuser.name:
-            self.diffuser = get_model(conf.diffuser.name)(to_ctr(conf.diffuser))
-            self.eval_diffuser = get_model(conf.diffuser.name)({**to_ctr(conf.diffuser), **{"timestep_respacing": str(conf.diffuser.ddim_steps)}})
+            self.diffuser = get_model(conf.diffuser.name)(
+                to_ctr(conf.diffuser)
+            )
+            self.eval_diffuser = get_model(conf.diffuser.name)(
+                {
+                    **to_ctr(conf.diffuser),
+                    **{"timestep_respacing": str(conf.diffuser.ddim_steps)},
+                }
+            )
 
         if conf.matcher.name:
             self.matcher = get_model(conf.matcher.name)(to_ctr(conf.matcher))
@@ -89,9 +106,15 @@ class TwoViewPipeline(BaseModel):
 
         if self.conf.diffuser.name and self.conf.matcher.name:
             if self.training:
-                pred = {**pred, **self.diffuser(self.matcher, {**data, **pred})}
+                pred = {
+                    **pred,
+                    **self.diffuser(self.matcher, {**data, **pred}),
+                }
             else:
-                pred = {**pred, **self.eval_diffuser(self.matcher, {**data, **pred})}
+                pred = {
+                    **pred,
+                    **self.eval_diffuser(self.matcher, {**data, **pred}),
+                }
         elif self.conf.matcher.name:
             pred = {**pred, **self.matcher({**data, **pred})}
         if self.conf.filter.name:
@@ -116,15 +139,20 @@ class TwoViewPipeline(BaseModel):
                 apply = self.conf[k].apply_loss
             if self.conf[k].name and apply:
                 try:
-                    if k=="diffuser" and not self.training:
+                    if k == "diffuser" and not self.training:
                         k = "eval_diffuser"
-                    losses_, metrics_ = getattr(self, k).loss(pred, {**pred, **data})
+                    losses_, metrics_ = getattr(self, k).loss(
+                        pred, {**pred, **data}
+                    )
                 except NotImplementedError:
                     continue
                 if "matcher_total" in losses_.keys():
                     losses_["total"] = losses_["matcher_total"]
                 elif "diffuser_total" in losses_.keys():
-                    losses_["total"] = losses_["diffuser_total"] * self.conf.diffuser.diffuser_loss_weight
+                    losses_["total"] = (
+                        losses_["diffuser_total"]
+                        * self.conf.diffuser.diffuser_loss_weight
+                    )
                 losses = {**losses, **losses_}
                 metrics = {**metrics, **metrics_}
                 total = losses_["total"] + total
