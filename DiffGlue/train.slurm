@@ -12,7 +12,4 @@
 #SBATCH --constraint=a40|l40s|l4
 #SBATCH -A pi_hzhang2_umass_edu
 
-# cd /project/pi_hzhang2_umass_edu/rishavdutta_umass_edu/git_repos/DiffGlue
-# apptainer exec --nv --bind "$PWD:/opt/source" diffglue.sif pip3 install --break-system-packages -r requirements.txt
-# apptainer exec --nv --bind "$PWD:/opt/source" diffglue.sif sh -c cd /opt/source/DiffGlue
-apptainer exec --nv /project/pi_hzhang2_umass_edu/rishavdutta_umass_edu/git_repos/DiffGlue/diffglue.sif python3 -m scripts.train SP+DiffGlue_homography --conf scripts/configs/superpoint+diffglue_homography.yaml --run_benchmarks
+apptainer exec --nv /project/pi_hzhang2_umass_edu/rishavdutta_umass_edu/git_repos/DiffGlue/diffglue.sif python3 -m scripts.train SP+DiffGlue_homography --conf scripts/configs/superpoint+diffglue_homography.yaml --run_benchmarks --restore
