@@ -3,6 +3,11 @@
 /DiffGlue/data/
 /DiffGlue/outputs/
 
+slurm/
+apptainer_dir/
+*.sif
+*.def
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

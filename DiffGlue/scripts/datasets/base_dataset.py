@@ -168,6 +168,8 @@ class BaseDataset(metaclass=ABCMeta):
             sampler = None
             if shuffle is None:
                 shuffle = split == "train" and self.conf.shuffle_training
+
+        logger.info(f"Using {num_workers} workers for {split} data loader")
         return DataLoader(
             dataset,
             batch_size=batch_size,

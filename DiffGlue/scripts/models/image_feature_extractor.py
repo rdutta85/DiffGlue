@@ -18,12 +18,18 @@ import torchvision
 
 import io
 import numpy as np
+from hydra.utils import instantiate
 
 logger = logging.getLogger(__name__)
 
 _RESNET_MEAN = [0.485, 0.456, 0.406]
 _RESNET_STD = [0.229, 0.224, 0.225]
 
+
+def disabled_train(self, mode=True):
+    """Overwrite model.train with this function to make sure train/eval mode
+    does not change anymore."""
+    return self
 
 class MultiScaleImageFeatureExtractor(nn.Module):
     def __init__(self, modelname: str = "dino_vits16", freeze: bool = False, scale_factors: list = [1, 1 / 2, 1 / 3]):
@@ -85,3 +91,26 @@ class MultiScaleImageFeatureExtractor(nn.Module):
     @staticmethod
     def _resize_image(image: torch.Tensor, scale_factor: float) -> torch.Tensor:
         return nn.functional.interpolate(image, scale_factor=scale_factor, mode="bilinear", align_corners=False)
+
+
+class BatchImageFeatureExtractor(nn.Module):
+    def __init__(self, extractor):
+        super().__init__()
+        self.extractor = instantiate(extractor, _recursive_=False)
+        self.extractor.eval()
+        self.extractor.train = disabled_train
+
+    def forward(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        img_0 = data['view0']['image']
+        img_1 = data['view1']['image']
+
+        # BGR tensor to RGB tensor
+        img_0 = img_0[:, [2, 1, 0], :, :]
+        img_1 = img_1[:, [2, 1, 0], :, :]
+
+        with torch.no_grad():
+            features_0 = self.extractor(img_0)
+            features_1 = self.extractor(img_1)
+
+        return {"features0": features_0, "features1": features_1}
+        

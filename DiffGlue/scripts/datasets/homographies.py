@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import omegaconf
 import torch
-from joblib import Parallel, delayed
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
@@ -50,7 +49,7 @@ class HomographyDataset(BaseDataset):
         # image search
         "data_dir": "revisitop1m",  # the top-level directory
         "image_dir": "jpg/",  # the subdirectory with the images
-        "image_list": "revisitop1m.txt",  # optional: list or filename of list
+        "image_list": None, #"revisitop1m.txt",  # optional: list or filename of list
         "glob": ["*.jpg", "*.png", "*.jpeg", "*.JPG", "*.PNG"],
         # splits
         "train_size": 100,
@@ -97,6 +96,10 @@ class HomographyDataset(BaseDataset):
         image_dir = data_dir / conf.image_dir
         images = []
         if conf.image_list is None:
+            logger.info(
+                "No image list provided. Searching for images in %s.",
+                image_dir,
+            )
             glob = [conf.glob] if isinstance(conf.glob, str) else conf.glob
             for g in glob:
                 images += list(image_dir.glob("**/" + g))
@@ -133,6 +136,8 @@ class HomographyDataset(BaseDataset):
         self.images = {"train": train_images, "val": val_images}
 
     def download_revisitop1m(self):
+        from joblib import Parallel, delayed
+        
         data_dir = DATA_PATH / self.conf.data_dir
         tmp_dir = data_dir.parent / "revisitop1m_tmp"
         if tmp_dir.exists():  # The previous download failed.
@@ -156,8 +161,8 @@ class HomographyDataset(BaseDataset):
                 tar.extractall(path=image_dir)
             tar_path.unlink()
 
-        Parallel(n_jobs=-1, backend="threading")(
-            delayed(_download_file)(n) for n in range(num_files)
+        Parallel(n_jobs=-1)(
+            delayed(_download_file)(n) for n in range(71, num_files)
         )
 
         shutil.move(tmp_dir, data_dir)

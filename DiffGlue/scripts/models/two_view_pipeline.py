@@ -13,7 +13,7 @@ that corresponds to the keypoint i in image 0. m0[i] = -1 if i is unmatched.
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
-from .. import models
+from . import image_feature_extractor
 from . import get_model
 from .base_model import BaseModel
 
@@ -22,7 +22,7 @@ to_ctr = OmegaConf.to_container  # convert DictConfig to dict
 
 class TwoViewPipeline(BaseModel):
     default_conf = {
-        "encoder": {"name": None},
+        "encoder": {},
         "extractor": {
             "name": None,
             "trainable": False,
@@ -47,10 +47,13 @@ class TwoViewPipeline(BaseModel):
     ]
 
     def _init(self, conf):
-        if conf.encoder.name:
+        if conf.encoder._target_:
+            print(f"Using encoder {conf.encoder._target_}")
             self.encoder = instantiate(
-                conf.IMAGE_FEATURE_EXTRACTOR, _recursive_=False
+                conf.encoder, _recursive_=False
             )
+        else:
+            print("No encoder")
 
         if conf.extractor.name:
             self.extractor = get_model(conf.extractor.name)(
@@ -104,7 +107,13 @@ class TwoViewPipeline(BaseModel):
             gt_pred = self.ground_truth({**data, **pred})
             pred.update({f"gt_{k}": v for k, v in gt_pred.items()})
 
+        if self.conf.encoder._target_:
+            pred = {**pred, **self.encoder({**data, **pred})}
+
         if self.conf.diffuser.name and self.conf.matcher.name:
+            # print(list(pred.keys())) # ['keypoints0', 'keypoint_scores0', 'descriptors0', 'keypoints1', 'keypoint_scores1', 'descriptors1']
+            # print(list(data.keys())) # ['H_0to1', 'scene', 'idx', 'is_illu', 'name', 'view0', 'view1']
+
             if self.training:
                 pred = {
                     **pred,
@@ -115,6 +124,8 @@ class TwoViewPipeline(BaseModel):
                     **pred,
                     **self.eval_diffuser(self.matcher, {**data, **pred}),
                 }
+            # print(list(pred.keys())) # ['keypoints0', 'keypoint_scores0', 'descriptors0', 'keypoints1', 'keypoint_scores1', 'descriptors1', 'matches0', 'matches1', 'matching_scores0', 'matching_scores1', 'ref_descriptors0', 'ref_descriptors1', 'log_assignment', 'mean', 'variance', 'log_variance', 'pred_xstart', 'sample']
+            # print(list(data.keys())) # ['H_0to1', 'scene', 'idx', 'is_illu', 'name', 'view0', 'view1']
         elif self.conf.matcher.name:
             pred = {**pred, **self.matcher({**data, **pred})}
         if self.conf.filter.name:

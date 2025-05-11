@@ -42,7 +42,7 @@ class HPatchesPipeline(EvalPipeline):
         "data": {
             "batch_size": 1,
             "name": "hpatches",
-            "num_workers": 16,
+            "num_workers": 1,
             "preprocessing": {
                 "resize": 480,  # we also resize during eval to have comparable metrics
                 "side": "short",

@@ -50,10 +50,12 @@ model:
         n_layers: 9
         scale: 2
 
-    IMAGE_FEATURE_EXTRACTOR: 
-        _target_: models.MultiScaleImageFeatureExtractor
-        modelname: "dino_vits16"
-        freeze: False
+    encoder: 
+        _target_: scripts.models.image_feature_extractor.BatchImageFeatureExtractor
+        extractor:
+            _target_: scripts.models.image_feature_extractor.MultiScaleImageFeatureExtractor
+            modelname: "dino_vits16"
+            freeze: True
 train:
     seed: 0
     epochs: 40
