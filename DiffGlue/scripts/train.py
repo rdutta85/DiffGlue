@@ -361,23 +361,23 @@ def training(rank, conf, output_dir, args):
             logger.info(f"Starting epoch {epoch}")
 
         # we first run the eval
-        if (
-            rank == 0
-            and epoch % conf.train.test_every_epoch == 0
-            and args.run_benchmarks
-        ):
-            for bname, eval_conf in conf.get("benchmarks", {}).items():
-                logger.info(f"Running eval on {bname}")
-                s, f, r = run_benchmark(
-                    bname,
-                    eval_conf,
-                    EVAL_PATH / bname / args.experiment / str(epoch),
-                    model.eval(),
-                )
-                logger.info(str(s))
-                for metric_name, value in s.items():
-                    writer.add_scalar(f"test/{bname}/{metric_name}", value, epoch)
-                del s, f
+        # if (
+        #     rank == 0
+        #     and epoch % conf.train.test_every_epoch == 0
+        #     and args.run_benchmarks
+        # ):
+        #     for bname, eval_conf in conf.get("benchmarks", {}).items():
+        #         logger.info(f"Running eval on {bname}")
+        #         s, f, r = run_benchmark(
+        #             bname,
+        #             eval_conf,
+        #             EVAL_PATH / bname / args.experiment / str(epoch),
+        #             model.eval(),
+        #         )
+        #         logger.info(str(s))
+        #         for metric_name, value in s.items():
+        #             writer.add_scalar(f"test/{bname}/{metric_name}", value, epoch)
+        #         del s, f
 
         # set the seed
         set_seed(conf.train.seed + epoch)

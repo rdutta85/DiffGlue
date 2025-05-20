@@ -443,7 +443,7 @@ class TransformerLayerEnhanced(nn.Module):
             [
                 nn.Sequential(
                     nn.ReLU(),
-                    nn.Linear(384, args[0]),
+                    nn.Linear(kwargs["feature_dim"], args[0]),
                 )
                 for _ in range(self.atten_layers)
             ]
@@ -933,7 +933,8 @@ class DiffGlueEnhanced(DiffGlue):
 
         self.transformers = nn.ModuleList(
             [
-                TransformerLayerEnhanced(d, h, self.time_embed_channels, conf.flash)
+                TransformerLayerEnhanced(
+                    d, h, self.time_embed_channels, conf.flash, feature_dim = conf.feature_dim)
                 for layer_index in range(n)
             ]
         )

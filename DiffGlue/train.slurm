@@ -2,14 +2,21 @@
 #SBATCH --mail-user=rishavdutta@umass.edu
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
-#SBATCH --cpus-per-gpu 8  # Number of Cores per Task
+#SBATCH --cpus-per-gpu 12  # Number of Cores per Task
 #SBATCH -p gpu
-#SBATCH --mem-per-cpu=8GB
+#SBATCH --mem-per-cpu=10GB
 #SBATCH -t 24:00:00  # Job time limit
 #SBATCH -o ./slurm/slurm-datasets-%j.out  # %j = job ID
 #SBATCH --gres=gpu:1
 #SBATCH --gpus=1
-#SBATCH --constraint=a40|l40s|l4
+#SBATCH --constraint=a40|l40s|a100|h100
 #SBATCH -A pi_hzhang2_umass_edu
 
-apptainer exec --nv /project/pi_hzhang2_umass_edu/rishavdutta_umass_edu/git_repos/DiffGlue/diffglue.sif python3 -m scripts.train SP+DiffGlue_homography --conf scripts/configs/superpoint+diffglue_homography.yaml --run_benchmarks --restore
+# apptainer exec --nv /project/pi_hzhang2_umass_edu/rishavdutta_umass_edu/git_repos/DiffGlue/diffglue.sif python3 -m scripts.train SP+DiffGlue_homography_dino_vits8 --conf scripts/configs/superpoint+diffglue_homography.yaml --run_benchmarks --restore
+# apptainer exec --nv /project/pi_hzhang2_umass_edu/rishavdutta_umass_edu/git_repos/DiffGlue/diffglue.sif python3 -m scripts.train SP+DiffGlue_homography_dino_vits16 --conf scripts/configs/superpoint+diffglue_homography.yaml --run_benchmarks --restore
+apptainer exec --nv /project/pi_hzhang2_umass_edu/rishavdutta_umass_edu/git_repos/DiffGlue/diffglue.sif python3 -m scripts.train SP+DiffGlue_homography_dinov2_vits14 --conf scripts/configs/superpoint+diffglue_homography.yaml --run_benchmarks
+
+
+# apptainer exec --nv /project/pi_hzhang2_umass_edu/rishavdutta_umass_edu/git_repos/DiffGlue/diffglue.sif python3 -m scripts.train SP+DiffGlue_homography_dino_vits8_scale1 --conf scripts/configs/superpoint+diffglue_homography.yaml --run_benchmarks --restore
+# apptainer exec --nv /project/pi_hzhang2_umass_edu/rishavdutta_umass_edu/git_repos/DiffGlue/diffglue.sif python3 -m scripts.train SP+DiffGlue_homography_dino_vits16_scale1 --conf scripts/configs/superpoint+diffglue_homography.yaml --run_benchmarks --restore
+# apptainer exec --nv /project/pi_hzhang2_umass_edu/rishavdutta_umass_edu/git_repos/DiffGlue/diffglue.sif python3 -m scripts.train SP+DiffGlue_homography_dinov2_vits14_scale1 --conf scripts/configs/superpoint+diffglue_homography.yaml --run_benchmarks

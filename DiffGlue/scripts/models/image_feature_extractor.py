@@ -37,6 +37,8 @@ class MultiScaleImageFeatureExtractor(nn.Module):
         self.freeze = freeze
         self.scale_factors = scale_factors
 
+        self.modelname = modelname
+
         if "res" in modelname:
             self._net = getattr(torchvision.models, modelname)(pretrained=True)
             self._output_dim = self._net.fc.weight.shape[1]
@@ -80,19 +82,29 @@ class MultiScaleImageFeatureExtractor(nn.Module):
             else:
                 inp = self._resize_image(img_normed, scale_factor)
 
-            if multiscale_features is None:
-                multiscale_features = self._net(inp)
+            if "dinov2" in self.modelname:
+                # resize to mutiple of 14
+                h, w = inp.shape[2:]
+                h = h // 14 * 14
+                w = w // 14 * 14
+
+                net_inp = nn.functional.interpolate(inp, size=(h, w), mode='bilinear', align_corners=False)
             else:
-                multiscale_features += self._net(inp)
+                net_inp = inp
+
+            if multiscale_features is None:
+                multiscale_features = self._net(net_inp)
+            else:
+                multiscale_features += self._net(net_inp)
 
         averaged_features = multiscale_features / len(self.scale_factors)
         return averaged_features
 
-    @staticmethod
-    def _resize_image(image: torch.Tensor, scale_factor: float) -> torch.Tensor:
-        return nn.functional.interpolate(image, scale_factor=scale_factor, mode="bilinear", align_corners=False)
+    def _resize_image(self, image: torch.Tensor, scale_factor: float) -> torch.Tensor:
+        return nn.functional.interpolate(
+            image, scale_factor=scale_factor, mode="bilinear", align_corners=False)
 
-
+        
 class BatchImageFeatureExtractor(nn.Module):
     def __init__(self, extractor):
         super().__init__()
@@ -103,11 +115,7 @@ class BatchImageFeatureExtractor(nn.Module):
     def forward(self, data: Dict[str, Any]) -> Dict[str, Any]:
         img_0 = data['view0']['image']
         img_1 = data['view1']['image']
-
-        # BGR tensor to RGB tensor
-        img_0 = img_0[:, [2, 1, 0], :, :]
-        img_1 = img_1[:, [2, 1, 0], :, :]
-
+        
         with torch.no_grad():
             features_0 = self.extractor(img_0)
             features_1 = self.extractor(img_1)

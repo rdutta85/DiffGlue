@@ -214,3 +214,6 @@ if __name__ == "__main__":
         for name, fig in f.items():
             fig.canvas.manager.set_window_title(name)
         plt.show()
+
+    for k, v in s.items():
+        print(f"{k}: {v:.4f}")

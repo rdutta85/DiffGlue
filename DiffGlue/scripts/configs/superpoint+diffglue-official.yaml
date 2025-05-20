@@ -32,6 +32,12 @@ model:
       clip_denoised: True
       diffuser_loss_weight: 1
       scale: 2
+    encoder: 
+      _target_: scripts.models.image_feature_extractor.BatchImageFeatureExtractor
+      extractor:
+        _target_: scripts.models.image_feature_extractor.MultiScaleImageFeatureExtractor
+        modelname: "dino_vits16"
+        freeze: True
 benchmarks:
     megadepth1500:
       data:

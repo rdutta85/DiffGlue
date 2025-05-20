@@ -60,6 +60,12 @@ model:
         diffuser_loss_weight: 1
         scale: 2
     allow_no_extract: True
+    encoder: 
+        _target_: scripts.models.image_feature_extractor.BatchImageFeatureExtractor
+        extractor:
+            _target_: scripts.models.image_feature_extractor.MultiScaleImageFeatureExtractor
+            modelname: "dino_vits16"
+            freeze: True
 train:
     seed: 0
     epochs: 40
