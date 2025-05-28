@@ -12,6 +12,7 @@ from ...settings import DATA_PATH
 from ..utils.losses import NLLLoss
 from ..utils.metrics import matcher_metrics
 from ..utils.net import timestep_embedding
+from ..utils.pose_utils import sampson_epipolar_loss
 
 FLASH_AVAILABLE = hasattr(F, "scaled_dot_product_attention")
 
@@ -1101,6 +1102,85 @@ class DiffGlueEnhanced(DiffGlue):
         }
 
         return pred
+
+    def loss(self, pred, data):
+        def loss_params(pred, i):
+            la, _ = self.log_assignment[i](
+                pred["ref_descriptors0"][:, i], pred["ref_descriptors1"][:, i]
+            )
+            return {
+                "log_assignment": la,
+            }
+
+        sum_weights = 1.0
+        nll, gt_weights, loss_metrics = self.loss_fn(
+            loss_params(pred, -1), data
+        )
+        N = pred["ref_descriptors0"].shape[1]
+        losses = {
+            "matcher_total": nll,
+            "last": nll.clone().detach(),
+            **loss_metrics,
+        }
+
+        if self.training:
+            losses["confidence"] = 0.0
+
+        losses["row_norm"] = (
+            pred["log_assignment"].exp()[:, :-1].sum(2).mean(1)
+        )
+
+        if self.training:
+            for i in range(N):
+                params_i = loss_params(pred, i)
+                nll, _, _ = self.loss_fn(params_i, data, weights=gt_weights)
+
+                if self.conf.loss.gamma > 0.0:
+                    weight = self.conf.loss.gamma ** (N - i)
+                else:
+                    weight = i + 1
+                sum_weights += weight
+                losses["matcher_total"] = (
+                    losses["matcher_total"] + nll * weight
+                )
+
+                losses["confidence"] += self.token_confidence[i].loss(
+                    pred["ref_descriptors0"][:, i],
+                    pred["ref_descriptors1"][:, i],
+                    params_i["log_assignment"],
+                    pred["log_assignment"],
+                ) / (N)
+
+                del params_i
+
+            #L_epipolar
+            if "T_0to1" in data and self.conf.loss.epipolar.enable:
+                L_epi = sampson_epipolar_loss( #32개 이미지 쌍이 들어감!
+                    data["keypoints0"],
+                    data["keypoints1"],
+                    pred["matches0"],
+                    data["T_0to1"],
+                    data['view0']['camera'],
+                    data['view1']['camera'],
+                    weight=0.1  # or some tunable value
+                ) # kpts0, kpts1, matches0, T0to1, cam0, cam1, weight=1.0
+                losses["geometry"] = L_epi
+            else:
+                losses["geometry"] = 0.0
+
+        losses["matcher_total"] /= sum_weights
+        # confidences
+        if self.training:
+            losses["matcher_total"] = (
+                losses["matcher_total"] + losses["confidence"] + losses["geometry"] # TODO: lambda??weight??
+            )
+
+        if not self.training:
+            # add metrics
+            metrics = matcher_metrics(pred, data)
+        else:
+            metrics = {}
+        return losses, metrics
 
 
 __main_model__ = DiffGlueEnhanced

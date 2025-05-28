@@ -14,7 +14,7 @@ data:
     read_depth: true
     read_image: true
     batch_size: 32
-    num_workers: 16
+    num_workers: 8
     load_features:
         do: false  # enable this if you have cached predictions
         path: exports/megadepth-undist-depth-r1024_SP-k2048-nms3/{scene}.h5
@@ -37,6 +37,10 @@ model:
         checkpointed: true
         n_layers: 9
         scale: 2
+        loss:
+            epipolar:
+                enable: False
+                
     ground_truth:
         name: matchers.depth_matcher
         th_positive: 3
@@ -64,8 +68,11 @@ model:
         _target_: scripts.models.image_feature_extractor.BatchImageFeatureExtractor
         extractor:
             _target_: scripts.models.image_feature_extractor.MultiScaleImageFeatureExtractor
-            modelname: "dino_vits16"
+            # modelname: "dino_vits8"
+            # modelname: "dino_vits16"
+            modelname: "dinov2_vits14"
             freeze: True
+            # scale_factors: [1]
 train:
     seed: 0
     epochs: 40
@@ -73,7 +80,7 @@ train:
     eval_every_iter: 1000
     lr: 1e-4
     lr_schedule:
-        start: 20
+        start: 3
         type: exp
         on_epoch: true
         exp_div_10: 10

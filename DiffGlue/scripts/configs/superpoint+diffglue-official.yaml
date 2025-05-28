@@ -36,8 +36,11 @@ model:
       _target_: scripts.models.image_feature_extractor.BatchImageFeatureExtractor
       extractor:
         _target_: scripts.models.image_feature_extractor.MultiScaleImageFeatureExtractor
-        modelname: "dino_vits16"
+        # modelname: "dino_vits8"
+        # modelname: "dino_vits16"
+        modelname: "dinov2_vits14"
         freeze: True
+        scale_factors: [1]
 benchmarks:
     megadepth1500:
       data:
