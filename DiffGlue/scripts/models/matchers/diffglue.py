@@ -1165,15 +1165,18 @@ class DiffGlueEnhanced(DiffGlue):
                     weight=0.1  # or some tunable value
                 ) # kpts0, kpts1, matches0, T0to1, cam0, cam1, weight=1.0
                 losses["geometry"] = L_epi
-            else:
-                losses["geometry"] = 0.0
 
         losses["matcher_total"] /= sum_weights
         # confidences
         if self.training:
-            losses["matcher_total"] = (
-                losses["matcher_total"] + losses["confidence"] + losses["geometry"] # TODO: lambda??weight??
-            )
+            if "T_0to1" in data and self.conf.loss.epipolar.enable:
+                losses["matcher_total"] = (
+                    losses["matcher_total"] + losses["confidence"] + losses["geometry"] # TODO: lambda??weight??
+                )
+            else:
+                losses["matcher_total"] = (
+                    losses["matcher_total"] + losses["confidence"]
+                )
 
         if not self.training:
             # add metrics

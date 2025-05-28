@@ -40,7 +40,7 @@ model:
         loss:
             epipolar:
                 enable: False
-                
+                # enable: True                
     ground_truth:
         name: matchers.depth_matcher
         th_positive: 3
@@ -72,7 +72,7 @@ model:
             # modelname: "dino_vits16"
             modelname: "dinov2_vits14"
             freeze: True
-            # scale_factors: [1]
+            scale_factors: [1]
 train:
     seed: 0
     epochs: 40

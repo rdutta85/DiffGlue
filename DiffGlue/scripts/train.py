@@ -3,6 +3,7 @@ import os
 
 import argparse
 import copy
+from pprint import pprint
 import re
 import shutil
 import signal
@@ -655,6 +656,9 @@ if __name__ == "__main__":
     output_dir.mkdir(exist_ok=True, parents=True)
 
     conf = OmegaConf.from_cli(args.dotlist)
+    print("Dotlist configuration:" + "-" * 40)
+    pprint(conf)
+    print("-" * 80)
     if args.conf:
         conf = OmegaConf.merge(OmegaConf.load(args.conf), conf)
     elif args.restore:
